@@ -1,0 +1,58 @@
+#
+# Copyright (c) 2016 Malcolm Ramsay malramsay64@gmail.com
+# Modified in 2019 by Reed Milewicz rmilewi@sandia.gov
+# Dockerfile to run lammps on a CentOS base install
+
+FROM centos:7.2.1511
+
+RUN yum -y update &&\
+    yum -y install \
+    git \
+    make \
+    gcc-c++ \
+    wget \
+    bc \
+    python-devel \
+    zlib-devel \
+    fftw3-devel \
+    mpich-devel && \
+    yum clean all 
+
+RUN git clone https://github.com/lammps/lammps.git /srv/lammps &&\ 
+    cd /srv/lammps && \
+    git checkout r15407 && \
+    cd src && \
+    mkdir -p MAKE/MINE
+
+RUN cd /srv/lammps/src && \
+    export PATH=$PATH:/usr/lib64/mpich/bin && \
+    python Make.py -m none -cc g++ -mpi mpich -fft fftw3 -a file && \
+    python Make.py -m auto -a lib-meam lib-poems lib-reax && \
+    python Make.py -m auto -p standard no-compress no-gpu no-kim no-kokkos no-voronoi
+    #python Make.py -m auto  
+
+RUN cd /srv/lammps/src && \
+    make -j 4 auto MPI_INC="-DMPICH_SKIP_MPICXX -I/usr/include/mpich-x86_64" MPI_LIB="-Wl,-rpath,/usr/lib64/mpich/lib -L/usr/lib64/mpich/lib -lmpl -lmpich" FFT_LIB="-lfftw3" && \
+    cp lmp_auto /usr/bin/lmp_mpi
+
+ENV PATH /usr/lib64/mpich/bin:${PATH}
+ENV LAMMPSDIR /srv/lammps
+
+WORKDIR /srv/
+RUN yum clean all && yum install -y yum-plugin-ovl && yum install -y python3 && git clone https://github.com/rmmilewi/FitSNAP
+
+RUN pip3 install numpy sklearn pandas natsort tqdm
+    
+RUN cd lammps/src && make yes-snap && make mpi -j 4 mode=shlib
+    
+ENV LAMMPSDIR /srv/lammps/
+ENV FITSNAPDIR /srv/FitSNAP/
+ENV LD_LIBRARY_PATH ${LD_LIBRARY_PATH}:$LAMMPSDIR/src
+ENV PYTHONPATH ${PYTHONPATH}:$LAMMPSDIR/python
+
+
+
+
+    
+
+    
